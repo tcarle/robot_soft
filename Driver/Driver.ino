@@ -14,8 +14,15 @@ int M1_speed = 5;
 int M2_direction = 7;
 int M2_speed = 6;
 
-int calibration_max;
-int calibration_min;
+int vitesse_moteur_M1=95;
+int vitesse_moteur_M2=85;
+int vitesse_max=255;
+
+int calibration_max=0;
+int calibration_min=0;
+int calibration_max_1, calibration_max_2, calibration_max_3;
+int calibration_min_1, calibration_min_2, calibration_min_3;
+
 
 boolean stop = false;
 
@@ -40,8 +47,8 @@ unsigned long driver(int sensor){
   }
   
   diff=t_2-t;
-  Serial.print(diff);
-  Serial.println();
+  //Serial.print(diff);
+  //Serial.println();
 
   return diff;
   
@@ -59,11 +66,17 @@ void toggle_up_button(){
       else{
         digitalWrite(ledPin, LOW);
         allume=false;
+        stop=false;
       }
     }
     ancien_etat=etat;
    }
    delay(1); 
+}
+
+void reset_calibration(){
+  calibration_max=0;
+  calibration_min=0;
 }
 
 void calibration(int sensor){
@@ -82,6 +95,8 @@ void calibration(int sensor){
         else{
           digitalWrite(ledPin, LOW);
           allume=false;
+          sensorsValues[i]=driver(sensor);
+          i++;
         }
       }
       ancien_etat=etat;
@@ -94,6 +109,7 @@ void calibration(int sensor){
   int maxi=sensorsValues[0];
   for(int i=0;i<4;i++){
     if (mini>sensorsValues[i]){
+      
       mini=sensorsValues[i];
     }
     if (maxi<sensorsValues[i]){
@@ -101,8 +117,8 @@ void calibration(int sensor){
     }
   }
 
-  calibration_max=maxi-((maxi*20)/100);
-  calibration_min=mini+((maxi*20)/100);
+  calibration_max=maxi-((maxi*30)/100);
+  calibration_min=mini+((maxi*30)/100);
 }
 
 ///////////////////////////////////////////Setup/Loop
@@ -117,38 +133,114 @@ void setup() {
   pinMode(pin_sensor_1, OUTPUT);
   pinMode(pin_sensor_2, OUTPUT);
   pinMode(pin_sensor_3, OUTPUT);
-
+ 
   pinMode(button, INPUT);
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
   Serial.begin(9600);
 
   //Calibration
+  /*calibration_max_1=797;
+  calibration_min_1=407;
+  calibration_max_2=503;
+  calibration_min_2=281;
+  calibration_max_3=682;
+  calibration_min_3=302;*/
+  calibration(pin_sensor_1);
+  calibration_max_1=calibration_max;
+  calibration_min_1=calibration_min;
+  reset_calibration();
   calibration(pin_sensor_2);
+  calibration_max_2=calibration_max;
+  calibration_min_2=calibration_min;
+  reset_calibration();
+  calibration(pin_sensor_3);
+  calibration_max_3=calibration_max;
+  calibration_min_3=calibration_min;
   allume=false;
   digitalWrite(ledPin, LOW);
+
 }
 
 void loop() {
-  //int sensor_1=driver(pin_sensor_1);
+  int sensor_1=driver(pin_sensor_1);
   int sensor_2=driver(pin_sensor_2);
-  //int sensor_3=driver(pin_sensor_3);
+  int sensor_3=driver(pin_sensor_3);
+  int i=0;
+
+  Serial.print(sensor_1);
+  Serial.print(" ");
+  Serial.print(sensor_2);
+  Serial.print(" ");
+  Serial.print(sensor_3);
+  Serial.println();
 
   toggle_up_button();
   
-  //Moteur 1
   if (!stop && allume){
+
     digitalWrite(M1_direction, HIGH);
-    analogWrite(M1_speed, 150); 
-    //Moteur 2
+    analogWrite(M1_speed, vitesse_moteur_M1); 
     digitalWrite(M2_direction, LOW);
-    analogWrite(M2_speed, 150);
+    analogWrite(M2_speed, vitesse_moteur_M2);
+
+    //Tous les capteurs sur du noir
+     while ((sensor_1>calibration_min_1 && sensor_2>calibration_min_2 && sensor_3>calibration_min_3)){
+      analogWrite(M1_speed, vitesse_moteur_M1);
+      analogWrite(M2_speed, vitesse_moteur_M2);
+      sensor_1=driver(pin_sensor_1);
+      sensor_2=driver(pin_sensor_2);
+      sensor_3=driver(pin_sensor_3);
+    }
+
+    //Capteur 1 et 2 sur noir, 3 sur blanc
+    //Capteur 1 sur noir, 2 et 3 sur blanc
+    while ((sensor_1>calibration_min_1 && sensor_2>calibration_min_2 && sensor_3<calibration_min_3) || 
+      (sensor_1>calibration_min_1 && sensor_2<calibration_min_2 && sensor_3<calibration_min_3)){
+      Serial.print("droite");
+      Serial.println();
+      Serial.print(vitesse_moteur_M1+i);
+      Serial.print(" ");
+      Serial.print(vitesse_moteur_M2);
+      Serial.println();
+      analogWrite(M1_speed, vitesse_moteur_M1+i);
+      analogWrite(M2_speed, vitesse_moteur_M2);
+      if ((vitesse_moteur_M1+i)<vitesse_max){
+        i+=2;
+      }
+      sensor_1=driver(pin_sensor_1);
+      sensor_2=driver(pin_sensor_2);
+      sensor_3=driver(pin_sensor_3);
+    }
+    i=0;
+
+    //Capteur 2 et 3 sur noir, 1 sur blanc
+    //Capteur 3 sur noir, 1 et 2 sur blanc
+    while ((sensor_1<calibration_min_1 && sensor_2>calibration_min_2 && sensor_3>calibration_min_3) || 
+      (sensor_1<calibration_min_1 && sensor_2<calibration_min_2 && sensor_3>calibration_min_3)){
+      Serial.print("gauche");
+      Serial.println();
+      Serial.print(vitesse_moteur_M1);
+      Serial.print(" ");
+      Serial.print(vitesse_moteur_M2+i);
+      Serial.println();
+      analogWrite(M1_speed, vitesse_moteur_M1);
+      analogWrite(M2_speed, vitesse_moteur_M2+i);
+      if ((vitesse_moteur_M2+i)<vitesse_max){
+        i+=2;
+      }
+      sensor_1=driver(pin_sensor_1);
+      sensor_2=driver(pin_sensor_2);
+      sensor_3=driver(pin_sensor_3);
+    }
+    i=0;
     
-    if (sensor_2<calibration_min){
+    //Tous les capteurs sur du blanc
+    if (sensor_1<calibration_min_1 && sensor_2<calibration_min_2 && sensor_3<calibration_min_3){
       analogWrite(M1_speed, 0);
       analogWrite(M2_speed, 0);
       stop = true;
-    } 
+    }
   }
   
 }

@@ -44,9 +44,9 @@ void loop() {
   toggle_up_button();
   if (allume){
     digitalWrite(M1_direction, HIGH);
-    analogWrite(M1_speed, 99); 
+    analogWrite(M1_speed, 140); 
     digitalWrite(M2_direction, LOW);
-    analogWrite(M2_speed, 105);
+    analogWrite(M2_speed, 140);
   }
   if (!allume){
     analogWrite(M1_speed, 0);
