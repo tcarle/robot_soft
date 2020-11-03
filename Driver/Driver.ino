@@ -1,32 +1,44 @@
+//Initialisation des variables
+//Capteurs
 uint8_t pin_sensor_3 = 8;
 uint8_t pin_sensor_2 = 9;
 uint8_t pin_sensor_1 = 12;
 unsigned long sensorsValues[4];
 
+//Bouton + LED
 int ledPin=10;
 int button = 2;
 boolean allume=false;
 boolean etat=0;
 boolean ancien_etat=0;
 
+//Moteurs
 int M1_direction = 4;
 int M1_speed = 5;
 int M2_direction = 7;
 int M2_speed = 6;
 
+//Vitesses des moteurs (base) + vitesse max
 int vitesse_moteur_M1=95;
 int vitesse_moteur_M2=85;
 int vitesse_max=255;
 
+//Variables pour la calibration
 int calibration_max=0;
 int calibration_min=0;
 int calibration_max_1, calibration_max_2, calibration_max_3;
 int calibration_min_1, calibration_min_2, calibration_min_3;
 
-
+//Variable pour que le robot s'arrête directement sur du blanc
 boolean stop = false;
 
-////////////////////////////////////////////////Fonctions
+////////////////////////////////////////////////////////////////////
+//Fonctions
+////////////////////////////////////////////////////////////////////
+
+//Fonction driver qui permet de calculer la réflectivité de la surface
+//Plus la valeur est élevée, moins la surface est réflective (on se rapproche du noir)
+//Si la valeur se rapproche de 0, la surface est réflective (on se rapproche du blanc)
 unsigned long driver(int sensor){
   pinMode(sensor, OUTPUT);
   digitalWrite(sensor, HIGH);
@@ -54,6 +66,8 @@ unsigned long driver(int sensor){
   
 }
 
+//Fonction qui permet de faire marcher le bouton (utiliser pour faire démarrer le robot)
+//Aussi pour le faire repartir (gain de temps pour ne pas à chaque fois recalibrer le robot à chaque essai)
 void toggle_up_button(){
   etat=digitalRead(button);
     
@@ -66,6 +80,9 @@ void toggle_up_button(){
       else{
         digitalWrite(ledPin, LOW);
         allume=false;
+        //On passe stop à false car si le robot s'arrête car les valeurs détectent du blanc
+        //On peut toujours le replacer sur une ligne noire pour le faire repartir
+        //Sans avoir à recalibrer le robot à nouveau
         stop=false;
       }
     }
@@ -74,13 +91,19 @@ void toggle_up_button(){
    delay(1); 
 }
 
+//Fonction qui remet les valeurs de calibration min et max à 0 à chaque passage des capteurs 
 void reset_calibration(){
   calibration_max=0;
   calibration_min=0;
 }
 
+//Fonction calibration qui prend les valeurs de la fonction driver
+//Execution d'un calcul pour avoir une marge d'erreur
 void calibration(int sensor){
   int i=0;
+
+  //Dès qu'on appuie sur le bouton, le programme prend la valeur à partir de driver
+  //Et l'enregistre dans un tableau
   while(i<4){
     etat=digitalRead(button);
     
@@ -104,7 +127,7 @@ void calibration(int sensor){
      delay(1);
   }
 
-  //Calcul
+  //Calcul de la marge d'erreur
   int mini=sensorsValues[0];
   int maxi=sensorsValues[0];
   for(int i=0;i<4;i++){
@@ -116,12 +139,15 @@ void calibration(int sensor){
       maxi=sensorsValues[i];
     }
   }
-
   calibration_max=maxi-((maxi*30)/100);
   calibration_min=mini+((maxi*30)/100);
 }
 
-///////////////////////////////////////////Setup/Loop
+
+////////////////////////////////////////////////////////////////////
+//Setup/Loop
+////////////////////////////////////////////////////////////////////
+
 void setup() {
   //Moteurs
   pinMode(M1_direction,OUTPUT);
@@ -133,19 +159,14 @@ void setup() {
   pinMode(pin_sensor_1, OUTPUT);
   pinMode(pin_sensor_2, OUTPUT);
   pinMode(pin_sensor_3, OUTPUT);
- 
+
+  //Bouton + LED
   pinMode(button, INPUT);
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
   Serial.begin(9600);
 
   //Calibration
-  /*calibration_max_1=797;
-  calibration_min_1=407;
-  calibration_max_2=503;
-  calibration_min_2=281;
-  calibration_max_3=682;
-  calibration_min_3=302;*/
   calibration(pin_sensor_1);
   calibration_max_1=calibration_max;
   calibration_min_1=calibration_min;
@@ -157,17 +178,20 @@ void setup() {
   calibration(pin_sensor_3);
   calibration_max_3=calibration_max;
   calibration_min_3=calibration_min;
+  
   allume=false;
   digitalWrite(ledPin, LOW);
 
 }
 
 void loop() {
+  //Prendre les valeurs des capteurs
   int sensor_1=driver(pin_sensor_1);
   int sensor_2=driver(pin_sensor_2);
   int sensor_3=driver(pin_sensor_3);
   int i=0;
 
+  //Print des valeurs
   Serial.print(sensor_1);
   Serial.print(" ");
   Serial.print(sensor_2);
@@ -175,10 +199,14 @@ void loop() {
   Serial.print(sensor_3);
   Serial.println();
 
+  //LED est éteinte
   toggle_up_button();
+  //Si on appuie sur le bouton pour allumer la LED, le robot démarre
+  //Si le robot était déjà en marche mais qu'il s'est arrêté à cause d'une surface réflective
+  //On peut le refaire démarrer en appuyant de nouveau sur le bouton
   
   if (!stop && allume){
-
+    //M1 à HIGH et M2 à LOW pour que les roues tournent dans le même sens
     digitalWrite(M1_direction, HIGH);
     analogWrite(M1_speed, vitesse_moteur_M1); 
     digitalWrite(M2_direction, LOW);
@@ -197,14 +225,11 @@ void loop() {
     //Capteur 1 sur noir, 2 et 3 sur blanc
     while ((sensor_1>calibration_min_1 && sensor_2>calibration_min_2 && sensor_3<calibration_min_3) || 
       (sensor_1>calibration_min_1 && sensor_2<calibration_min_2 && sensor_3<calibration_min_3)){
-      Serial.print("droite");
-      Serial.println();
-      Serial.print(vitesse_moteur_M1+i);
-      Serial.print(" ");
-      Serial.print(vitesse_moteur_M2);
-      Serial.println();
       analogWrite(M1_speed, vitesse_moteur_M1+i);
       analogWrite(M2_speed, vitesse_moteur_M2);
+      
+      //Pour faire tourner le robot, on incrémente la vitesse de base sans dépasser la vitesse max
+      //On tourne à gauche
       if ((vitesse_moteur_M1+i)<vitesse_max){
         i+=2;
       }
@@ -218,14 +243,11 @@ void loop() {
     //Capteur 3 sur noir, 1 et 2 sur blanc
     while ((sensor_1<calibration_min_1 && sensor_2>calibration_min_2 && sensor_3>calibration_min_3) || 
       (sensor_1<calibration_min_1 && sensor_2<calibration_min_2 && sensor_3>calibration_min_3)){
-      Serial.print("gauche");
-      Serial.println();
-      Serial.print(vitesse_moteur_M1);
-      Serial.print(" ");
-      Serial.print(vitesse_moteur_M2+i);
-      Serial.println();
       analogWrite(M1_speed, vitesse_moteur_M1);
       analogWrite(M2_speed, vitesse_moteur_M2+i);
+
+      //Pour faire tourner le robot, on incrémente la vitesse de base sans dépasser la vitesse max
+      //On tourne à droite
       if ((vitesse_moteur_M2+i)<vitesse_max){
         i+=2;
       }
