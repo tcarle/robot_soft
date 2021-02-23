@@ -19,8 +19,8 @@ int M2_direction = 7;
 int M2_speed = 6;
 
 //Vitesses des moteurs (base) + vitesse max
-int vitesse_moteur_M1=95;
-int vitesse_moteur_M2=85;
+int vitesse_moteur_M1=130;
+int vitesse_moteur_M2=120;
 int vitesse_max=255;
 
 //Variables pour la calibration
@@ -226,12 +226,12 @@ void loop() {
     while ((sensor_1>calibration_min_1 && sensor_2>calibration_min_2 && sensor_3<calibration_min_3) || 
       (sensor_1>calibration_min_1 && sensor_2<calibration_min_2 && sensor_3<calibration_min_3)){
       analogWrite(M1_speed, vitesse_moteur_M1+i);
-      analogWrite(M2_speed, vitesse_moteur_M2);
+      analogWrite(M2_speed, vitesse_moteur_M2-i);
       
       //Pour faire tourner le robot, on incrémente la vitesse de base sans dépasser la vitesse max
       //On tourne à gauche
-      if ((vitesse_moteur_M1+i)<vitesse_max){
-        i+=2;
+      if ((vitesse_moteur_M1+i)<vitesse_max && (vitesse_moteur_M2-i)>0){
+        i+=5;
       }
       sensor_1=driver(pin_sensor_1);
       sensor_2=driver(pin_sensor_2);
@@ -243,19 +243,19 @@ void loop() {
     //Capteur 3 sur noir, 1 et 2 sur blanc
     while ((sensor_1<calibration_min_1 && sensor_2>calibration_min_2 && sensor_3>calibration_min_3) || 
       (sensor_1<calibration_min_1 && sensor_2<calibration_min_2 && sensor_3>calibration_min_3)){
-      analogWrite(M1_speed, vitesse_moteur_M1);
+      analogWrite(M1_speed, vitesse_moteur_M1-i);
       analogWrite(M2_speed, vitesse_moteur_M2+i);
 
       //Pour faire tourner le robot, on incrémente la vitesse de base sans dépasser la vitesse max
       //On tourne à droite
-      if ((vitesse_moteur_M2+i)<vitesse_max){
-        i+=2;
+      if ((vitesse_moteur_M2+i)<vitesse_max && (vitesse_moteur_M1-i)>0){
+        i+=5;
       }
       sensor_1=driver(pin_sensor_1);
       sensor_2=driver(pin_sensor_2);
       sensor_3=driver(pin_sensor_3);
     }
-    i=0;
+    i=0;  
     
     //Tous les capteurs sur du blanc
     if (sensor_1<calibration_min_1 && sensor_2<calibration_min_2 && sensor_3<calibration_min_3){
