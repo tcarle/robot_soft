@@ -5,6 +5,7 @@ uint8_t pin_sensor_2 = 9;
 uint8_t pin_sensor_1 = 12;
 
 unsigned long sensorsValues1[4], sensorsValues2[4], sensorsValues3[4];
+unsigned long sensorsValuesPID_G[10], sensorsValuesPID_D[10];
 
 float moyenne1=0, moyenne2=0, moyenne3=0;
 
@@ -22,8 +23,8 @@ int M2_direction = 7;
 int M2_speed = 6;
 
 //Vitesses des moteurs (base) + vitesse max
-int vitesse_moteur_M1=210;
-int vitesse_moteur_M2=200;
+int vitesse_moteur_M1=230;
+int vitesse_moteur_M2=220;
 int vitesse_max=255;
 
 //Variables pour la calibration
@@ -43,10 +44,10 @@ int indice=0;
 int indice_loop=0;
 
 //Variables PID
-float k_p=0.4;
-float k_d=0.15;
+float k_p=1;
+float k_d=0.3;
 float k_i=0;
-float k_sr=1;
+float k_sr=5;
 float erreur_tableau[10];
 
 ////////////////////////////////////////////////////////////////////
@@ -121,8 +122,11 @@ void calibration(int sensor_g, int sensor_d){
         if (!allume){
           digitalWrite(ledPin, HIGH);
           allume=true;
-          G_0=driver(sensor_g);
-          D_0=driver(sensor_d);
+          for(int j=0; j<10;j++){
+            sensorsValuesPID_G[j]=driver(sensor_g);
+            sensorsValuesPID_D[j]=driver(sensor_d);
+          }
+          
           i++;
         }
         else{
@@ -135,6 +139,13 @@ void calibration(int sensor_g, int sensor_d){
      }
      delay(1);
   }
+
+  for(int i=0; i<10;i++){
+    G_0=sensorsValuesPID_G[i];
+    D_0=sensorsValuesPID_D[i];
+  }
+  G_0/=10;
+  D_0/=10;
 }
 
 //Fonction pour calculer le PID
@@ -207,6 +218,16 @@ float calcul_variation_vitesse(){
   return somme;
 }
 
+
+//Fonction qui fait la somme des 10 dernières erreurs
+int maximum(int erreur_g, int erreur_d){
+  int maxi=erreur_g;
+  if (erreur_d>erreur_g){
+    maxi=erreur_d;
+  }
+  return maxi;
+}
+
 ////////////////////////////////////////////////////////////////////
 //Setup/Loop
 ////////////////////////////////////////////////////////////////////
@@ -264,10 +285,9 @@ void loop() {
 
   float pid=calcul_pid(erreur, derniere_erreur, erreur_totale);
 
-  erreur_tableau[indice]=erreur;
+  erreur_tableau[indice]=max(erreur_g,erreur_d);
   float sr=k_sr*abs(calcul_variation_vitesse());
-
-  erreur_tableau[indice]=erreur;
+  
   Serial.println(pid);
 
   //Print des valeurs
@@ -308,8 +328,7 @@ void loop() {
         analogWrite(M2_speed, vitesse_moteur_M2-sr);
       }
     }
-
-    if (erreur>0){
+    else{
       if (vitesse_moteur_M2-pid>0){
         analogWrite(M1_speed, vitesse_moteur_M1-sr);
         analogWrite(M2_speed, vitesse_moteur_M2-pid-sr);
