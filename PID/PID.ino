@@ -23,8 +23,8 @@ int M2_direction = 7;
 int M2_speed = 6;
 
 //Vitesses des moteurs (base) + vitesse max
-int vitesse_moteur_M1=230;
-int vitesse_moteur_M2=220;
+int vitesse_moteur_M1=110;
+int vitesse_moteur_M2=110;
 int vitesse_max=255;
 
 //Variables pour la calibration
@@ -44,12 +44,18 @@ int indice=0;
 int indice_loop=0;
 
 //Variables PID
-float k_p=1;
-float k_d=0.3;
-float k_i=0;
-float k_sr=5;
-float erreur_tableau[10];
+float k_p=0.08;
+float k_d=0.01;
+float k_i=0;//0.005;
+float k_sr=0.08;
+float erreur_tableau[50];
 
+//Variable temps
+unsigned long start=0;
+unsigned long stopp=0;
+
+
+int out;
 ////////////////////////////////////////////////////////////////////
 //Fonctions
 ////////////////////////////////////////////////////////////////////
@@ -141,16 +147,16 @@ void calibration(int sensor_g, int sensor_d){
   }
 
   for(int i=0; i<10;i++){
-    G_0=sensorsValuesPID_G[i];
-    D_0=sensorsValuesPID_D[i];
+    G_0+=sensorsValuesPID_G[i];
+    D_0+=sensorsValuesPID_D[i];
   }
   G_0/=10;
   D_0/=10;
 }
 
 //Fonction pour calculer le PID
-float calcul_pid(int erreur, int derniere_erreur, int erreur_totale){
-  float p = k_p*erreur + k_d*(derniere_erreur-erreur) + k_i*erreur_totale;
+int calcul_pid(int erreur, int derniere_erreur, int erreur_totale){
+  int p =(int)(k_p*erreur + k_d*(erreur-derniere_erreur) + k_i*erreur_totale);
   return p;
 }
 
@@ -204,18 +210,18 @@ void calibration_blanc(int sensor1, int sensor2, int sensor3){
 
 //Fonction initialisation tableau
 void init_tableau(){
-  for(int i=0; i<10; i++){
+  for(int i=0; i<50; i++){
     erreur_tableau[i]=0;
   }
 }
 
 //Fonction qui fait la somme des 10 dernières erreurs
-float calcul_variation_vitesse(){
-  float somme=0;
-  for(int i=0; i<10; i++){
-    somme+=0;
+int calcul_variation_vitesse(){
+  int somme=0;
+  for(int i=0; i<50; i++){
+    somme+=erreur_tableau[i];
   }
-  return somme;
+  return somme/5;
 }
 
 
@@ -226,6 +232,37 @@ int maximum(int erreur_g, int erreur_d){
     maxi=erreur_d;
   }
   return maxi;
+}
+
+void arret_robot(){
+  analogWrite(M1_speed, 0);
+  analogWrite(M2_speed, 0);
+  stop = true;
+}
+
+int calcul_sr(int erreur){
+  if (erreur<10){
+    digitalWrite(ledPin, HIGH);
+    return 0;
+  }
+  int somme=0;
+  for(int i=0; i<50; i++){
+    somme+=erreur_tableau[i];
+  }
+  somme=abs(somme)/50;
+  int res=k_sr*somme;
+  //digitalWrite(ledPin, LOW);
+  return res;
+}
+
+void remise_tableau_zero(int derniere_erreur, int erreur, int indice){
+  if ((derniere_erreur>0 && erreur<0) || (derniere_erreur<0 && erreur>0)){
+    for(int i=0; i<50; i++){
+      if (indice!=i){
+        erreur_tableau[i]=0;
+      }
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -250,31 +287,39 @@ void setup() {
   digitalWrite(ledPin, LOW);
   Serial.begin(9600);
 
+  digitalWrite(M1_direction, HIGH);
+  digitalWrite(M2_direction, LOW);
   //Calibration blanc
   calibration_blanc(pin_sensor_1, pin_sensor_2, pin_sensor_3);
-  Serial.print(moyenne1);
-  Serial.print(" ");
+
+  /*Serial.print(moyenne1);
+  Serial.print("  ");
   Serial.print(moyenne2);
-  Serial.print(" ");
-  Serial.print(moyenne3);
-  Serial.println();
+  Serial.println();*/
 
   //Calibration PID
   calibration(pin_sensor_1, pin_sensor_3);
-  Serial.print(G_0);
-  Serial.print(" ");
-  Serial.print(D_0);
-  Serial.println();
   
   allume=false;
+  out = 0;
   digitalWrite(ledPin, LOW);
 }
 
 void loop() {
+  start=millis();
+  
   //Prendre les valeurs des capteurs
   int sensor_g=driver(pin_sensor_1);
+ // Serial.println("G0");
+ // Serial.println(G_0);
+ // Serial.println(sensor_g);
+  
   int sensor_m=driver(pin_sensor_2);
   int sensor_d=driver(pin_sensor_3);
+ // Serial.println("D0=");
+ // Serial.println(D_0);
+ // Serial.println(sensor_d);
+  
   int i=0;
 
   derniere_erreur=erreur;
@@ -282,28 +327,14 @@ void loop() {
   erreur_d=sensor_d-D_0;
   erreur=erreur_g-erreur_d;
   erreur_totale+=erreur;
-
-  float pid=calcul_pid(erreur, derniere_erreur, erreur_totale);
-
-  erreur_tableau[indice]=max(erreur_g,erreur_d);
-  float sr=k_sr*abs(calcul_variation_vitesse());
   
-  Serial.println(pid);
+  float pid=calcul_pid(erreur, derniere_erreur, calcul_variation_vitesse());// erreur_totale);
+  erreur_tableau[indice]=erreur;//max(erreur_g,erreur_d);
 
-  //Print des valeurs
-  /*Serial.print(erreur_g);
-  Serial.print(" ");
-  Serial.print(erreur_d);
-  Serial.println();
-  Serial.println(erreur);
-  Serial.println(erreur_totale);*/
-  
-  Serial.print(sensor_g);
-  Serial.print(" ");
-  Serial.print(sensor_m);
-  Serial.print(" ");
-  Serial.print(sensor_d);
-  Serial.println();
+  int sr=calcul_sr(erreur);
+  //Serial.println(erreur);
+
+  remise_tableau_zero(derniere_erreur, erreur_tableau[indice], indice);
 
   //LED est éteinte
   toggle_up_button();
@@ -313,42 +344,46 @@ void loop() {
   
   if (!stop && allume){
     //M1 à HIGH et M2 à LOW pour que les roues tournent dans le même sens
-    digitalWrite(M1_direction, HIGH);
-    analogWrite(M1_speed, vitesse_moteur_M1); 
-    digitalWrite(M2_direction, LOW);
-    analogWrite(M2_speed, vitesse_moteur_M2);
-
-    if (erreur<0){
-      if (vitesse_moteur_M1+pid<vitesse_max){
-        analogWrite(M1_speed, vitesse_moteur_M1+pid-sr);
-        analogWrite(M2_speed, vitesse_moteur_M2-sr);
+    //digitalWrite(M1_direction, HIGH);
+    //analogWrite(M1_speed, vitesse_moteur_M1); 
+    //digitalWrite(M2_direction, LOW);
+    //analogWrite(M2_speed, vitesse_moteur_M2);
+    int vit_M1 = min(254, vitesse_moteur_M1+pid-sr);
+    vit_M1 = max(0,vit_M1);
+    int vit_M2 = min(254, vitesse_moteur_M2-pid-sr);
+    vit_M2 = max(0, vit_M2);
+    analogWrite(M1_speed, vit_M1);
+    analogWrite(M2_speed, vit_M2);
+    
+    if(indice==0){
+      if (sensor_g<moyenne1 && sensor_d<moyenne3 && out){
+        arret_robot();
       }
       else{
-        analogWrite(M1_speed, vitesse_max-sr);
-        analogWrite(M2_speed, vitesse_moteur_M2-sr);
+        if (sensor_g<moyenne1 && sensor_d<moyenne3){
+          out =1;
+          }
+        else{
+          out=0;
+         }
       }
     }
-    else{
-      if (vitesse_moteur_M2-pid>0){
-        analogWrite(M1_speed, vitesse_moteur_M1-sr);
-        analogWrite(M2_speed, vitesse_moteur_M2-pid-sr);
-      }
-      else{
-        analogWrite(M1_speed, vitesse_moteur_M1-sr);
-        analogWrite(M2_speed, 0);
-      }
-    }
-
-    if (sensor_g<moyenne1 && sensor_d<moyenne3){
-      analogWrite(M1_speed, 0);
-      analogWrite(M2_speed, 0);
-      stop = true;
-    }
+    
   }
 
   indice++, indice_loop++;
 
-  if (indice==10){
+  if (indice==50){
     indice=0;
   }
+
+  stopp=millis();
+  unsigned long reste=10-(stopp-start);
+
+  if (reste<0){
+    digitalWrite(ledPin, LOW);
+    arret_robot();
+  }
+
+  delay(reste);
 }
